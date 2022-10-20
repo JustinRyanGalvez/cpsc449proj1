@@ -30,30 +30,34 @@ app.config.from_file(f"./etc/{__name__}.toml", toml.load)
 
 
 
-@dataclasses.dataclass
-class User:
-  username: str
-  password: str
-  score: int
+# @dataclasses.dataclass
+# class User:
+#     username: str
+#     password: str
 
+@dataclasses.dataclass
+class Game:
+    id: int
+    user_id: string
+    word_id: int
 
 async def _connect_db():
-  database = databases.Database(app.config["DATABASES"]["URL"])
-  await database.connect()
-  return database
+    database = databases.Database(app.config["DATABASES"]["URL"])
+    await database.connect()
+    return database
 
 
 def _get_db():
-  if not hasattr(g, "sqlite_db"):
-    g.sqlite_db = _connect_db()
-  return g.sqlite_db
+    if not hasattr(g, "sqlite_db"):
+        g.sqlite_db = _connect_db()
+    return g.sqlite_db
 
 
 @app.teardown_appcontext
 async def close_connection(exception):
-  db = getattr(g, "_sqlite_db", None)
-  if db is not None:
-    await db.disconnect()
+    db = getattr(g, "_sqlite_db", None)
+    if db is not None:
+        await db.disconnect()
 
 
 @app.route("/", methods=["GET"])
@@ -64,13 +68,64 @@ def index():
     """)
 
 
+@app.route("/games/all", methods=["GET"])
+async def all_books():
+    db = await _get_db()
+    all_games = await db.fetch_all("SELECT * FROM games;")
+    return list(map(dict, all_games))
+
+@app.route("/games/<int:id>/<string:user_id>", methods=["GET"])
+async def one_game(id, user_id):
+    db = await _get_db()
+    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id, values={"id": id})
+    if game:
+        return dict(game)
+    else:
+        abort(404)
+
+# Ask Carter where correct word is stored and fix line with hashtags
+@app.route("/games/<int:id>/<string:user_id>", methods=["PUT"])
+async def one_book(id, user_id):
+    db = await _get_db()
+    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id, values={"id": id}) #######
+    if game:
+        return dict(game)
+    else:
+        abort(404)
+
+@app.route("/games/new/", methods=["POST"])
+@validate_request(Game)
+def create_game(data):
+    db = await _get_db()
+    game = dataclasses.asdict(data)
+    try:
+        id = await db.execute(
+            """
+            INSERT INTO games(id, user_id, word_id)
+            VALUES(:id, :user_id, :word_id)
+            """,
+            game,
+        )
+    except sqlite3.IntegrityError as e:
+        abort(409, e)
+
+    game["id"] = id
+    return game, 201, {"Location": f"/games/{id}"}
+
 @app.route("/scores/all", methods=["GET"])
 async def all_scores():
-  db = await _get_db()
-  all_scores = await db.fetch_all("SELECT * FROM scores;")
+    db = await _get_db()
+    all_scores = await db.fetch_all("SELECT * FROM scores;")
+    return list(map(dict, all_scores))
 
-  return list(map(dict, all_scores))
+@app.errorhandler(RequestSchemaValidationError)
+def bad_request(e):
+    return {"error": str(e.validation_error)}, 400
 
+
+@app.errorhandler(409)
+def conflict(e):
+    return {"error": str(e)}, 409
 
 # def newGame():
 #   //Establish new identifier
