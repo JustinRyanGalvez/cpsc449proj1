@@ -37,7 +37,7 @@ app.config.from_file(f"./etc/{__name__}.toml", toml.load)
 
 @dataclasses.dataclass
 class Game:
-    id: int
+    game_id: int
     user_id: str
     word_id: int
 
@@ -68,11 +68,11 @@ def index():
     """)
 
 
-@app.route("/games/all", methods=["GET"])
-async def all_books():
-    db = await _get_db()
-    all_games = await db.fetch_all("SELECT * FROM games;")
-    return list(map(dict, all_games))
+# @app.route("/games/all", methods=["GET"])
+# async def all_games():
+#     db = await _get_db()
+#     all_games = await db.fetch_all("SELECT * FROM games;")
+#     return list(map(dict, all_games))
 
 @app.route("/games/<int:id>/<string:user_id>", methods=["GET"])
 async def one_game(id, user_id):
@@ -84,10 +84,12 @@ async def one_game(id, user_id):
         abort(404)
 
 # Ask Carter where correct word is stored and fix line with hashtags
-@app.route("/games/<int:id>/<string:user_id>", methods=["PUT"])
-async def one_book(id, user_id):
+@app.route("/games/<int:game_id>/<string:username>", methods=["PUT"])
+async def play_game(game_id, username):
     db = await _get_db()
-    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id", values={"id": id}) #######
+    # word_id = await db.fetch_one("SELECT word_id FROM games WHERE game_id = :game_id AND user_id = :user_id", values={"game_id": game_id}) #######
+    # secret_word = await db.fetch_one("SELECT correct_answers FROM answers WHERE")
+    # guesses_left = await db.fetch_one("SELECT guesses_left FROM games WHERE word_id = :word_id AND user_id = :user_id", values={"word_id":word_id})
     if game:
         return dict(game)
     else:
@@ -101,8 +103,8 @@ async def create_game(data):
     try:
         id = await db.execute(
             """
-            INSERT INTO games(id, user_id, word_id)
-            VALUES(:id, :user_id, :word_id)
+            INSERT INTO games(game_id, user_id, word_id)
+            VALUES(:game_id, :user_id, :word_id)
             """,
             game,
         )
