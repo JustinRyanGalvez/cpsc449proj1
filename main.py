@@ -38,7 +38,7 @@ app.config.from_file(f"./etc/{__name__}.toml", toml.load)
 @dataclasses.dataclass
 class Game:
     id: int
-    user_id: string
+    user_id: str
     word_id: int
 
 async def _connect_db():
@@ -77,7 +77,7 @@ async def all_books():
 @app.route("/games/<int:id>/<string:user_id>", methods=["GET"])
 async def one_game(id, user_id):
     db = await _get_db()
-    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id, values={"id": id})
+    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id", values={"id": id})
     if game:
         return dict(game)
     else:
@@ -87,7 +87,7 @@ async def one_game(id, user_id):
 @app.route("/games/<int:id>/<string:user_id>", methods=["PUT"])
 async def one_book(id, user_id):
     db = await _get_db()
-    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id, values={"id": id}) #######
+    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id", values={"id": id}) #######
     if game:
         return dict(game)
     else:
@@ -95,7 +95,7 @@ async def one_book(id, user_id):
 
 @app.route("/games/new/", methods=["POST"])
 @validate_request(Game)
-def create_game(data):
+async def create_game(data):
     db = await _get_db()
     game = dataclasses.asdict(data)
     try:
