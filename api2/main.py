@@ -37,15 +37,8 @@ app.config.from_file(f"./etc/{__name__}.toml", toml.load)
 
 @dataclasses.dataclass
 class Game:
-    game_id: int
-    user_id: int
-    word_id: int
-    guesses_left: int
     guess: str
-    guess_valid: str
-    correct_spot: str
-    wrong_spot: str
-    # condition: str
+
 
 @dataclasses.dataclass
 class newGame:
@@ -101,7 +94,7 @@ async def grab_games(user_id):
 # Play game
 @app.route("/games/<int:game_id>/<int:user_id>", methods=["PATCH"])
 @validate_request(Game)
-async def play_game(data):
+async def play_game(data, game_id, user_id):
     db = await _get_db()
 
     # Transforms game into dictionary from dataclass
@@ -109,7 +102,7 @@ async def play_game(data):
 
     # Check if game exists by looking at the word_id with game_id and user_id
     word_id = await db.fetch_one(
-        "SELECT word_id FROM games WHERE game_id = :game_id AND user_id = :user_id",
+        "SELECT word_id FROM game WHERE game_id = :game_id AND user_id = :user_id",
         values={"game_id": game_id, "user_id": user_id},
     )
 
@@ -128,7 +121,6 @@ async def play_game(data):
                 UPDATE game SET guess = :guess WHERE game_id = :game_id
                 """,
                 game,
-                values={"game_id": game_id},
             )
 
         except sqlite3.IntegrityError as e:
@@ -137,6 +129,7 @@ async def play_game(data):
         # If these statements don't work, make a new var and do a fetchone() from the newly
         # updated table and store the value that way
         # May not be needed
+        print("guess = ", guess)
         game["guess"] = guess
 
         # Grab all possible answers from db
@@ -158,7 +151,6 @@ async def play_game(data):
                     UPDATE game SET guess_valid = True WHERE game_id = :game_id
                     """,
                     game,
-                    values={"game_id": game_id},
                 )
 
             except sqlite3.IntegrityError as e:
@@ -214,7 +206,6 @@ async def play_game(data):
                     UPDATE game SET correct_spot = :correctSpot WHERE game_id = :game_id
                     """,
                     game,
-                    values={"correct_spot": correctSpot, "game_id": game_id},
                 )
 
                 wrong_spot = await db.execute(
@@ -222,7 +213,6 @@ async def play_game(data):
                     UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id
                     """,
                     game,
-                    values={"wrong_spot": wrongSpot, "game_id" : game_id},
                 )
 
             except sqlite3.IntegrityError as e:
@@ -240,7 +230,6 @@ async def play_game(data):
                         UPDATE game SET guesses_left = guesses_left - 1 WHERE game_id = :game_id
                         """,
                         game,
-                        values={"game_id": game_id},
                     )
 
                 except sqlite3.IntegrityError as e:
@@ -263,15 +252,16 @@ async def play_game(data):
 async def create_game(data):
     db = await _get_db()
     game = dataclasses.asdict(data)
-    pizza = random.randint(0, 1000)
-    # newGame["word_id"] = await db.fetch_one(
+    # pizza = random.randint(0, 100)
+    # test = await db.fetch_one(
     #     "SELECT word_id FROM answers ORDER BY RAND() LIMIT 1"
     # )
+    # # print()
 
     #Fix
     try:
         id = await db.execute(
-            """INSERT INTO game(user_id, word_id) VALUES(:user_id, ?)""",
+            """INSERT INTO game(user_id, word_id) VALUES(:user_id, (SELECT word_id FROM answers ORDER BY RANDOM() LIMIT 1))""",
             game,
         )
     except sqlite3.IntegrityError as e:
