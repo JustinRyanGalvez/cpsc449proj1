@@ -39,7 +39,7 @@ class Game:
     game_id: int
     user_id: int
     word_id: int
-    guesses_left: int = 6
+    guesses_left: int
     guess: str
     guess_valid: str
     correct_spot: str
