@@ -261,7 +261,7 @@ async def create_game(data):
     db = await _get_db()
     game = dataclasses.asdict(data)
     word_id = await db.fetch_one(
-    "SELECT word_id FROM answers ORDER BY RAND() LIMIT 1"
+        "SELECT word_id FROM answers ORDER BY RAND() LIMIT 1"
     )
     try:
         id = await db.execute(
