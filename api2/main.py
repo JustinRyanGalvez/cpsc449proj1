@@ -62,8 +62,8 @@ def _get_db():
 @app.teardown_appcontext
 async def close_connection(exception):
     db = getattr(g, "_sqlite_db", None)
-        if db is not None:
-    await db.disconnect()
+    if db is not None:
+        await db.disconnect()
 
 
 @app.route("/", methods=["GET"])
@@ -117,16 +117,17 @@ async def play_game(data):
 
         # Grabs secret word for comparing later
         secret_word = await db.fetch_one(
-        "SELECT correct_answers FROM answers WHERE word_id = :word_id",
-        values={"word_id": word_id})
+            "SELECT correct_answers FROM answers WHERE word_id = :word_id",
+            values={"word_id": word_id}
+        )
 
         # Updates guess in db
         try:
             guess = await db.execute(
-            """
-            UPDATE game SET guess = :guess WHERE game_id = :game_id
-            """,
-            game,
+                """
+                UPDATE game SET guess = :guess WHERE game_id = :game_id
+                """,
+                game,
             )
 
         except sqlite3.IntegrityError as e:
@@ -139,7 +140,7 @@ async def play_game(data):
 
         # Grab all possible answers from db
         possible_answers = await db.fetchall(
-        "SELECT possible_answers FROM answers"
+            "SELECT possible_answers FROM answers"
         )
 
         # Check if guess is valid by comparing it to every possible answer
@@ -152,10 +153,10 @@ async def play_game(data):
             # Update guess_valid in db
             try:
                 guess_valid = await db.execute(
-                """
-                UPDATE game SET guess_valid = True WHERE game_id = :game_id
-                """,
-                game,
+                    """
+                    UPDATE game SET guess_valid = True WHERE game_id = :game_id
+                    """,
+                    game,
                 )
 
             except sqlite3.IntegrityError as e:
@@ -164,26 +165,26 @@ async def play_game(data):
             guess = game["guess"]
 
             # If winning condition, update condition
-            if guess == secret_word:
-            # update condition
+            # if guess == secret_word:
+                # update condition
 
-            # try:
-            # condition = await db.execute(
-            #   """
-            #   UPDATE game SET condition = 'W', correct_spots = guess WHERE game_id = :game_id
-            #   """,
-            #   game,
-            # )
+                # try:
+                # condition = await db.execute(
+                #   """
+                #   UPDATE game SET condition = 'W', correct_spots = guess WHERE game_id = :game_id
+                #   """,
+                #   game,
+                # )
 
-            # except sqlite3.IntegrityError as e:
-            #   abort(409, e)
+                # except sqlite3.IntegrityError as e:
+                #   abort(409, e)
 
-            # game["condition"] = condition
+                # game["condition"] = condition
 
-            # return game, 201, {"Location": f"/games/{game_id}/{user_id}"}
+                # return game, 201, {"Location": f"/games/{game_id}/{user_id}"}
 
-            # Place guess letters in list to be able to remove duplicates later
-            # (May not be needed)
+                # Place guess letters in list to be able to remove duplicates later
+                # (May not be needed)
             correctSpotList = []
             wrongSpotList = []
 
@@ -207,19 +208,19 @@ async def play_game(data):
             # Update correct spot and wrong spot in db
             try:
                 correct_spot = await db.execute(
-                """
-                UPDATE game SET correct_spot = :correctSpot WHERE game_id = :game_id
-                """,
-                game,
-                values={"correct_spot": correctSpot},
+                    """
+                    UPDATE game SET correct_spot = :correctSpot WHERE game_id = :game_id
+                    """,
+                    game,
+                    values={"correct_spot": correctSpot},
                 )
 
                 wrong_spot = await db.execute(
-                """
-                UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id
-                """,
-                game,
-                values={"wrong_spot": wrongSpot},
+                    """
+                    UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id
+                    """,
+                    game,
+                    values={"wrong_spot": wrongSpot},
                 )
 
             except sqlite3.IntegrityError as e:
@@ -233,10 +234,10 @@ async def play_game(data):
             if len(correctSpot) < 5:
                 try:
                     guesses_left = await db.execute(
-                    """
-                    UPDATE game SET guesses_left = guesses_left - 1 WHERE game_id = :game_id
-                    """,
-                    game,
+                        """
+                        UPDATE game SET guesses_left = guesses_left - 1 WHERE game_id = :game_id
+                        """,
+                        game,
                     )
 
                 except sqlite3.IntegrityError as e:
@@ -264,15 +265,15 @@ async def create_game(data):
     )
     try:
         id = await db.execute(
-        """
-        INSERT INTO games(user_id, word_id, guesses_left)
-        VALUES(:user_id, :word_id, 6)
-        """,
-        game,
-        values={"word_id": word_id},
+            """
+            INSERT INTO games(user_id, word_id, guesses_left)
+            VALUES(:user_id, :word_id, 6)
+            """,
+            game,
+            values={"word_id": word_id},
         )
     except sqlite3.IntegrityError as e:
-    abort(409, e)
+        abort(409, e)
 
     game["game_id"] = id
     return game, 201, {"Location": f"/games/{id}"}
