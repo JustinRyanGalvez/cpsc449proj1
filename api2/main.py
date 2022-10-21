@@ -28,18 +28,24 @@ app.config.from_file(f"./etc/{__name__}.toml", toml.load)
 #return JSON {validGuess: True, letters}
 #Maybe use a list and make it a json
 
-
-
 # @dataclasses.dataclass
 # class User:
 #     username: str
 #     password: str
 
+
 @dataclasses.dataclass
 class Game:
     game_id: int
-    user_id: str
+    user_id: int
     word_id: int
+    guesses_left: int = 6
+    guess: str
+    guess_valid: str
+    correct_spot: str
+    wrong_spot: str
+    # condition: str
+
 
 async def _connect_db():
     database = databases.Database(app.config["DATABASES"]["URL"])
@@ -56,69 +62,228 @@ def _get_db():
 @app.teardown_appcontext
 async def close_connection(exception):
     db = getattr(g, "_sqlite_db", None)
-    if db is not None:
-        await db.disconnect()
+        if db is not None:
+    await db.disconnect()
 
 
 @app.route("/", methods=["GET"])
 def index():
-  return textwrap.dedent("""
-        <h1>Wordle population</h1>
-        <p>A prototype API for user information of Worldle players</p>\n
+    return textwrap.dedent("""
+    <h1>Wordle population</h1>
+    <p>A prototype API for user information of Worldle players</p>\n
     """)
 
 
 # @app.route("/games/all", methods=["GET"])
 # async def all_games():
-#     db = await _get_db()
-#     all_games = await db.fetch_all("SELECT * FROM games;")
-#     return list(map(dict, all_games))
+#   db = await _get_db()
+#   all_games = await db.fetch_all("SELECT * FROM games;")
+#   return list(map(dict, all_games))
 
-@app.route("/games/<int:id>/<string:user_id>", methods=["GET"])
-async def one_game(id, user_id):
+
+# Apeksha portion, include authentication with password
+@app.route("/register", methods=["POST"])
+async def register():
     db = await _get_db()
-    game = await db.fetch_one("SELECT * FROM games WHERE id = :id AND user_id = :user_id", values={"id": id})
+
+
+# Grab games of user
+@app.route("/games/<int:user_id>", methods=["GET"])
+async def grab_games(user_id):
+    db = await _get_db()
+    game = await db.fetch_one("SELECT * FROM games WHERE user_id = :user_id",
+    values={"user_id": user_id})
     if game:
         return dict(game)
     else:
         abort(404)
+
 
 # Ask Carter where correct word is stored and fix line with hashtags
-@app.route("/games/<int:game_id>/<string:username>", methods=["PUT"])
-async def play_game(game_id, username):
+# Play game
+@app.route("/games/<int:game_id>/<int:user_id>", methods=["PATCH"])
+@validate_request(Game)
+async def play_game(data):
     db = await _get_db()
-    # word_id = await db.fetch_one("SELECT word_id FROM games WHERE game_id = :game_id AND user_id = :user_id", values={"game_id": game_id}) #######
-    # secret_word = await db.fetch_one("SELECT correct_answers FROM answers WHERE")
-    # guesses_left = await db.fetch_one("SELECT guesses_left FROM games WHERE word_id = :word_id AND user_id = :user_id", values={"word_id":word_id})
-    if game:
-        return dict(game)
+
+    # Transforms game into dictionary from dataclass
+    game = dataclasses.asdict(data)
+
+    # Check if game exists by looking at the word_id with game_id and user_id
+    word_id = await db.fetch_one(
+    "SELECT word_id FROM games WHERE game_id = :game_id AND user_id = :user_id")
+
+    if word_id:
+
+        # Grabs secret word for comparing later
+        secret_word = await db.fetch_one(
+        "SELECT correct_answers FROM answers WHERE word_id = :word_id",
+        values={"word_id": word_id})
+
+        # Updates guess in db
+        try:
+            guess = await db.execute(
+            """
+            UPDATE game SET guess = :guess WHERE game_id = :game_id
+            """,
+            game,
+            )
+
+        except sqlite3.IntegrityError as e:
+            abort(409, e)
+
+        # If these statements don't work, make a new var and do a fetchone() from the newly
+        # updated table and store the value that way
+        # May not be needed
+        game["guess"] = guess
+
+        # Grab all possible answers from db
+        possible_answers = await db.fetchall(
+        "SELECT possible_answers FROM answers"
+        )
+
+        # Check if guess is valid by comparing it to every possible answer
+        for row in possible_answers:
+            if game["guess"] == row[0]:
+                game["guess_valid"] = 'True'
+
+        if game["guess_valid"] == 'True':
+
+            # Update guess_valid in db
+            try:
+                guess_valid = await db.execute(
+                """
+                UPDATE game SET guess_valid = True WHERE game_id = :game_id
+                """,
+                game,
+                )
+
+            except sqlite3.IntegrityError as e:
+                abort(409, e)
+
+            guess = game["guess"]
+
+            # If winning condition, update condition
+            if guess == secret_word:
+            # update condition
+
+            # try:
+            # condition = await db.execute(
+            #   """
+            #   UPDATE game SET condition = 'W', correct_spots = guess WHERE game_id = :game_id
+            #   """,
+            #   game,
+            # )
+
+            # except sqlite3.IntegrityError as e:
+            #   abort(409, e)
+
+            # game["condition"] = condition
+
+            # return game, 201, {"Location": f"/games/{game_id}/{user_id}"}
+
+            # Place guess letters in list to be able to remove duplicates later
+            # (May not be needed)
+            correctSpotList = []
+            wrongSpotList = []
+
+            # Compare each letter and see if it is in secret word
+            for x in range(0, len(secret_word)):
+                for y in range(0, len(secret_word)):
+                    if guess[x] == secret_word[y] and x == y:
+                        correctSpotList.append(guess[x])
+
+                    elif guess[x] == secret_word[y] and x != y:
+                        wrongSpotList.append(guess[x])
+
+            # (May not be needed)
+            correctSpotList = list(dict.fromkeys(correctSpotList))
+            wrongSpotList = list(dict.fromkeys(wrongSpotList))
+
+            # (May not be needed)
+            correctSpot = ''.join(correctSpotList)
+            wrongSpot = ''.join(wrongSpotList)
+
+            # Update correct spot and wrong spot in db
+            try:
+                correct_spot = await db.execute(
+                """
+                UPDATE game SET correct_spot = :correctSpot WHERE game_id = :game_id
+                """,
+                game,
+                values={"correct_spot": correctSpot},
+                )
+
+                wrong_spot = await db.execute(
+                """
+                UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id
+                """,
+                game,
+                values={"wrong_spot": wrongSpot},
+                )
+
+            except sqlite3.IntegrityError as e:
+                abort(409, e)
+
+            # (May not be needed)
+            game["correct_spot"] = correct_spot
+            game["wrong_spot"] = wrong_spot
+
+            # If not every letter in correctSpot, deduct guesses_left by 1 in db
+            if len(correctSpot) < 5:
+                try:
+                    guesses_left = await db.execute(
+                    """
+                    UPDATE game SET guesses_left = guesses_left - 1 WHERE game_id = :game_id
+                    """,
+                    game,
+                    )
+
+                except sqlite3.IntegrityError as e:
+                    abort(409, e)
+
+                # (May not be needed)
+                game["guesses_left"] = guesses_left
+
+                return game, 200, {"Location": f"/games/{game_id}/{user_id}"}
+
+        else:
+            abort(404)
+
     else:
         abort(404)
 
+# Create new game
 @app.route("/games/new/", methods=["POST"])
 @validate_request(Game)
 async def create_game(data):
     db = await _get_db()
     game = dataclasses.asdict(data)
+    word_id = await db.fetch_one(
+    "SELECT word_id FROM answers ORDER BY RAND() LIMIT 1"
+    )
     try:
         id = await db.execute(
-            """
-            INSERT INTO games(game_id, user_id, word_id)
-            VALUES(:game_id, :user_id, :word_id)
-            """,
-            game,
+        """
+        INSERT INTO games(user_id, word_id, guesses_left)
+        VALUES(:user_id, :word_id, 6)
+        """,
+        game,
+        values={"word_id": word_id},
         )
     except sqlite3.IntegrityError as e:
-        abort(409, e)
+    abort(409, e)
 
-    game["id"] = id
+    game["game_id"] = id
     return game, 201, {"Location": f"/games/{id}"}
 
-@app.route("/scores/all", methods=["GET"])
-async def all_scores():
-    db = await _get_db()
-    all_scores = await db.fetch_all("SELECT * FROM scores;")
-    return list(map(dict, all_scores))
+
+# @app.route("/scores/all", methods=["GET"])
+# async def all_scores():
+#   db = await _get_db()
+#   all_scores = await db.fetch_all("SELECT * FROM scores;")
+#   return list(map(dict, all_scores))
+
 
 @app.errorhandler(RequestSchemaValidationError)
 def bad_request(e):
@@ -128,6 +293,7 @@ def bad_request(e):
 @app.errorhandler(409)
 def conflict(e):
     return {"error": str(e)}, 409
+
 
 # def newGame():
 #   //Establish new identifier
