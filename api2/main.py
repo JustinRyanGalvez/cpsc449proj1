@@ -6,6 +6,7 @@ import json
 
 import databases
 import toml
+import random
 
 from quart import Quart, g, request, abort
 from quart_schema import QuartSchema, RequestSchemaValidationError, validate_request
@@ -46,17 +47,16 @@ class Game:
     wrong_spot: str
     # condition: str
 
+@dataclasses.dataclass
+class newGame:
+    user_id: int
 
-async def _connect_db():
-    database = databases.Database(app.config["DATABASES"]["URL"])
-    await database.connect()
-    return database
-
-
-def _get_db():
-    if not hasattr(g, "sqlite_db"):
-        g.sqlite_db = _connect_db()
-    return g.sqlite_db
+async def _get_db():
+    db = getattr(g, "_sqlite_db", None)
+    if db is None:
+        db = g._sqlite_db = databases.Database(app.config["DATABASES"]["URL"])
+        await db.connect()
+    return db
 
 
 @app.teardown_appcontext
@@ -73,7 +73,7 @@ def index():
     <p>A prototype API for user information of Worldle players</p>\n
     """)
 
-
+#
 # @app.route("/games/all", methods=["GET"])
 # async def all_games():
 #   db = await _get_db()
@@ -86,12 +86,11 @@ def index():
 async def register():
     db = await _get_db()
 
-
 # Grab games of user
 @app.route("/games/<int:user_id>", methods=["GET"])
 async def grab_games(user_id):
     db = await _get_db()
-    game = await db.fetch_one("SELECT * FROM games WHERE user_id = :user_id",
+    game = await db.fetch_one("SELECT * FROM game WHERE user_id = :user_id",
     values={"user_id": user_id})
     if game:
         return dict(game)
@@ -99,7 +98,6 @@ async def grab_games(user_id):
         abort(404)
 
 
-# Ask Carter where correct word is stored and fix line with hashtags
 # Play game
 @app.route("/games/<int:game_id>/<int:user_id>", methods=["PATCH"])
 @validate_request(Game)
@@ -111,7 +109,9 @@ async def play_game(data):
 
     # Check if game exists by looking at the word_id with game_id and user_id
     word_id = await db.fetch_one(
-    "SELECT word_id FROM games WHERE game_id = :game_id AND user_id = :user_id")
+        "SELECT word_id FROM games WHERE game_id = :game_id AND user_id = :user_id",
+        values={"game_id": game_id, "user_id": user_id},
+    )
 
     if word_id:
 
@@ -128,6 +128,7 @@ async def play_game(data):
                 UPDATE game SET guess = :guess WHERE game_id = :game_id
                 """,
                 game,
+                values={"game_id": game_id},
             )
 
         except sqlite3.IntegrityError as e:
@@ -157,6 +158,7 @@ async def play_game(data):
                     UPDATE game SET guess_valid = True WHERE game_id = :game_id
                     """,
                     game,
+                    values={"game_id": game_id},
                 )
 
             except sqlite3.IntegrityError as e:
@@ -212,7 +214,7 @@ async def play_game(data):
                     UPDATE game SET correct_spot = :correctSpot WHERE game_id = :game_id
                     """,
                     game,
-                    values={"correct_spot": correctSpot},
+                    values={"correct_spot": correctSpot, "game_id": game_id},
                 )
 
                 wrong_spot = await db.execute(
@@ -220,7 +222,7 @@ async def play_game(data):
                     UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id
                     """,
                     game,
-                    values={"wrong_spot": wrongSpot},
+                    values={"wrong_spot": wrongSpot, "game_id" : game_id},
                 )
 
             except sqlite3.IntegrityError as e:
@@ -238,6 +240,7 @@ async def play_game(data):
                         UPDATE game SET guesses_left = guesses_left - 1 WHERE game_id = :game_id
                         """,
                         game,
+                        values={"game_id": game_id},
                     )
 
                 except sqlite3.IntegrityError as e:
@@ -256,27 +259,26 @@ async def play_game(data):
 
 # Create new game
 @app.route("/games/new/", methods=["POST"])
-@validate_request(Game)
+@validate_request(newGame)
 async def create_game(data):
     db = await _get_db()
     game = dataclasses.asdict(data)
-    word_id = await db.fetch_one(
-        "SELECT word_id FROM answers ORDER BY RAND() LIMIT 1"
-    )
+    pizza = random.randint(0, 1000)
+    # newGame["word_id"] = await db.fetch_one(
+    #     "SELECT word_id FROM answers ORDER BY RAND() LIMIT 1"
+    # )
+
+    #Fix
     try:
         id = await db.execute(
-            """
-            INSERT INTO games(user_id, word_id, guesses_left)
-            VALUES(:user_id, :word_id, 6)
-            """,
+            """INSERT INTO game(user_id, word_id) VALUES(:user_id, ?)""",
             game,
-            values={"word_id": word_id},
         )
     except sqlite3.IntegrityError as e:
         abort(409, e)
 
     game["game_id"] = id
-    return game, 201, {"Location": f"/games/{id}"}
+    return game, 201, {"Location": f"/game/{id}"}
 
 
 # @app.route("/scores/all", methods=["GET"])

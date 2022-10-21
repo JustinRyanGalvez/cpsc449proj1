@@ -1,3 +1,5 @@
+-- $ sqlite3 ./var/wordle.db < ./share/wordle.sql
+
 PRAGMA foreign_keys=ON;
 BEGIN TRANSACTION;
 DROP TABLE IF EXISTS user;
@@ -17,5 +19,4 @@ CREATE TABLE answers (
 word_id INTEGER PRIMARY KEY AUTOINCREMENT,
 correct_answers varchar not null,
 possible_answers varchar not null);
-DELETE FROM sqlite_sequence;
 COMMIT;
