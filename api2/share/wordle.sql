@@ -1,11 +1,11 @@
 --sqlite3 ./var/wordle.db < ./share/wordle.sql
 
-PRAGMA foreign_keys=ON;
+PRAGMA foreign_keys=OFF;
 BEGIN TRANSACTION;
 DROP TABLE IF EXISTS user;
 DROP TABLE IF EXISTS correct_answers;
-DROP TABLE IF EXISTS game;
 DROP TABLE IF EXISTS possible_answers;
+DROP TABLE IF EXISTS game;
 CREATE TABLE user (
 user_id INTEGER PRIMARY KEY AUTOINCREMENT,
 username varchar not null,
@@ -2322,17 +2322,6 @@ INSERT INTO correct_answers VALUES(2306,'stalk');
 INSERT INTO correct_answers VALUES(2307,'flack');
 INSERT INTO correct_answers VALUES(2308,'widow');
 INSERT INTO correct_answers VALUES(2309,'augur');
-CREATE TABLE game(
-game_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-user_id INT NOT NULL,
-word_id INT NOT NULL,
-guess STRING (5) DEFAULT 'null',
-guesses_left INT DEFAULT 6,
-correct_spot STRING (5) DEFAULT 'null',
-wrong_spot STRING (5) DEFAULT 'null',
-condition STRING DEFAULT 'IP',
-FOREIGN KEY (user_id) REFERENCES user (user_id),
-FOREIGN KEY (word_id) REFERENCES correct_answers (word_id));
 CREATE TABLE possible_answers(
 answers STRING);
 INSERT INTO possible_answers VALUES('aahed');
@@ -14881,5 +14870,17 @@ INSERT INTO possible_answers VALUES('zygal');
 INSERT INTO possible_answers VALUES('zygon');
 INSERT INTO possible_answers VALUES('zymes');
 INSERT INTO possible_answers VALUES('zymic');
+CREATE TABLE game(
+game_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+user_id INT NOT NULL,
+word_id INT NOT NULL,
+guess STRING (5) DEFAULT 'null',
+guess_valid STRING DEFAULT 'null',
+guesses_left INT DEFAULT 6,
+correct_spot STRING (5) DEFAULT 'null',
+wrong_spot STRING (5) DEFAULT 'null',
+condition STRING DEFAULT 'IP',
+FOREIGN KEY (user_id) REFERENCES user (user_id),
+FOREIGN KEY (word_id) REFERENCES correct_answers (word_id));
 DELETE FROM sqlite_sequence;
 COMMIT;
