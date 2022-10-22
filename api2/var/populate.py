@@ -13,11 +13,12 @@ def population():
     with open('correct.json',) as e:
         info = json.load(e)
         for j in range(len(info)):
-            c.execute("INSERT INTO answers(correct_answers) VALUES(?)",[info[j]])
+            c.execute("INSERT INTO correct_answers(answers) VALUES(?)",[info[j]])
     with open('valid.json',) as f:
-        data = json.load(f)
-        for i in range(len(data)):
-            c.execute("INSERT INTO answers(possible_answers) VALUES(?)",[data[i]])
+            data = json.load(f)
+            for j in range(len(data)):
+                c.execute("INSERT INTO possible_answers(answers) VALUES(?)",[data[j]])
+
     #This closes any connection to the database
     conn.commit()
     c.close()

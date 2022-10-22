@@ -1,0 +1,28 @@
+--sqlite3 ./var/wordle.db < ./share/wordle.sql
+
+PRAGMA foreign_keys=ON;
+BEGIN TRANSACTION;
+DROP TABLE IF EXISTS user;
+DROP TABLE IF EXISTS answers;
+DROP TABLE IF EXISTS game;
+CREATE TABLE user (
+user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+username varchar not null,
+password varchar not null);
+CREATE TABLE answers (
+word_id INTEGER PRIMARY KEY AUTOINCREMENT,
+correct_answers varchar,
+possible_answers varchar);
+CREATE TABLE game (
+game_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+user_id INT NOT NULL,
+word_id INT NOT NULL,
+guess STRING (5) DEFAULT 'null',
+guesses_left INT DEFAULT 6,
+correct_spot STRING (5) DEFAULT 'null',
+wrong_spot STRING (5) DEFAULT 'null',
+condition STRING DEFAULT 'IP',
+FOREIGN KEY (user_id) REFERENCES user (user_id),
+FOREIGN KEY (word_id) REFERENCES answers (word_id));
+DELETE FROM sqlite_sequence;
+COMMIT;

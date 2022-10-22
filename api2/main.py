@@ -108,7 +108,7 @@ async def play_game(data):
     #     "SELECT word_id FROM game WHERE game_id = :game_id AND user_id = :user_id",
     #     values={"game_id": game_id, "user_id": user_id},
     # )
-    word_id = 5
+    # word_id = 5
     print("game: ", game)
 
     if word_id:
@@ -118,7 +118,7 @@ async def play_game(data):
         except sqlite3.IntegrityError as e:
             abort(409, e)
         # # Grabs secret word for comparing later
-        secret_word = await db.fetch_one("SELECT correct_answers FROM answers WHERE word_id = 5")
+        secret_word = await db.fetch_one("SELECT answers FROM correct_answers WHERE word_id = 5")
     #
         # Updates guess in db
 
@@ -130,7 +130,7 @@ async def play_game(data):
         # game["guess"] = guess
     #
     #     # Grab all possible answers from db
-        possible_answers = await db.fetch_all("SELECT possible_answers FROM answers")
+        possible_answers = await db.fetch_all("SELECT answers FROM possible_answers")
 
         print("possible_answers: ", possible_answers)
     #
