@@ -42,7 +42,6 @@ class Game:
     guess: str
 
 
-
 @dataclasses.dataclass
 class newGame:
     user_id: int
@@ -93,6 +92,16 @@ async def grab_games(user_id):
     else:
         abort(404)
 
+@app.route("/games/state/<int:game_id>", methods=["GET"])
+async def grab_game_state(game_id):
+    db = await _get_db()
+    game_state = await db.fetch_one("SELECT condition FROM game WHERE game_id = :game_id", values={"game_id" : game_id})
+    if game_state:
+        return dict(game_state)
+    else:
+        abort(404)
+
+
 
 # Play game
 @app.route("/play", methods=["PATCH"])
@@ -102,6 +111,8 @@ async def play_game(data):
 
     # Transforms game into dictionary from dataclass
     game = dataclasses.asdict(data)
+
+    print('game: ', game)
 
     user_id = game["user_id"]
     game_id = game["game_id"]
@@ -121,7 +132,7 @@ async def play_game(data):
 
     # if word_id:
     try:
-        id = await db.execute("UPDATE game SET guess = :guess WHERE :game_id AND user_id = :user_id",game)
+        id = await db.execute("UPDATE game SET guess = :guess WHERE :game_id AND user_id = :user_id", game)
 
     except sqlite3.IntegrityError as e:
         abort(409, e)
@@ -134,8 +145,9 @@ async def play_game(data):
         """,
         values={"game_id": game_id},
     )
-#
-    print("Secret word: ", secret_word)
+
+    print("guess: ", guess)
+    print("Secret word: ", secret_word[0])
     # Updates guess in db
 
 
@@ -149,14 +161,13 @@ async def play_game(data):
     possible_answers = await db.fetch_all("SELECT answers FROM possible_answers")
 
     counter = 0
-#     # Check if guess is valid by comparing it to every possible answer
-    # FIX THIS
-    for row in range(len(possible_answers)):
-        if guess == possible_answers[row]:
-            print('WE MADE IT HERE')
+    # Check if guess is valid by comparing it to every possible answer
+    for i in range(len(possible_answers)):
+        if guess == possible_answers[i][0]:
             counter = 1
-            guess_valid = await db.execute("UPDATE game SET guess_valid = 'True' WHERE game_id = :game_id AND user_id = :user_id", game)
+            guess_valid = await db.execute("UPDATE game SET guess = :guess, guess_valid = 'True' WHERE game_id = :game_id AND user_id = :user_id", game)
             print("guess valid: ", guess_valid)
+
 #
     if counter == 1:
 # #     if game["guess_valid"] == 'True':
@@ -175,42 +186,49 @@ async def play_game(data):
 # #
 # #
         # If winning condition, update condition
-        if guess == secret_word:
+        if guess == secret_word[0]:
             # update condition
-            condition = await db.execute("UPDATE game SET condition = 'W', correct_spots = guess WHERE game_id = :game_id AND user_id = :user_id", game)
+            condition = await db.execute("UPDATE game SET condition = 'W', correct_spots = :guess WHERE game_id = :game_id AND user_id = :user_id", game)
             return game, 201, {"Location": f"/games/play"}
 #
-# #             # Place guess letters in list to be able to remove duplicates later
-# #             # (May not be needed)
-# #         correctSpotList = []
-# #         wrongSpotList = []
+        # Place guess letters in list to be able to remove duplicates later
+        # (May not be needed)
+        correctSpotList = []
+        wrongSpotList = []
 # #
 # #         # Compare each letter and see if it is in secret word
-#         for x in range(0, len(secret_word)):
-#             for y in range(0, len(secret_word)):
-#                 if guess[x] == secret_word[y] and x == y:
-#                     correctSpotList.append(guess[x])
-#
-#                 elif guess[x] == secret_word[y] and x != y:
-#                     wrongSpotList.append(guess[x])
-# #
-# #         # (May not be needed)
-# #         correctSpotList = list(dict.fromkeys(correctSpotList))
-# #         wrongSpotList = list(dict.fromkeys(wrongSpotList))
-# #
-# #         # (May not be needed)
-# #         correctSpot = ''.join(correctSpotList)
-# #         wrongSpot = ''.join(wrongSpotList)
+        for x in range(0, len(secret_word[0])):
+            for y in range(0, len(secret_word[0])):
+                if guess[x] == secret_word[0][y] and x == y:
+                    correctSpotList.append(guess[x])
+
+                elif guess[x] == secret_word[0][y] and x != y:
+                    wrongSpotList.append(guess[x])
+    # #
+        print("correctSpotList: ", correctSpotList)
+        print("wrongSpotList: ", wrongSpotList)
+
+
+        # (May not be needed)
+        # correctSpotList = list(dict.fromkeys(correctSpotList))
+        # wrongSpotList = list(dict.fromkeys(wrongSpotList))
+        #
+        # # (May not be needed)
+        correctSpot = ''.join(correctSpotList)
+        wrongSpot = ''.join(wrongSpotList)
+
+        print("correctSpot: ", correctSpot)
+        print("wrongSpot: ", wrongSpot)
 # #
 #         # Update correct spot and wrong spot in db
-#         # try:
-#         correct_spot = await db.execute("""UPDATE game SET correct_spot = :correctSpot WHERE game_id = :game_id AND user_id = :user_id""", game)
-#
-#         wrong_spot = await db.execute("""UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id AND user_id = :user_id""", game)
-#
-#
-#         # except sqlite3.IntegrityError as e:
-#         #     abort(409, e)
+        try:
+            correct_spot = await db.execute("""UPDATE game SET correct_spot = ? WHERE guess = :guess AND game_id = :game_id AND user_id = :user_id""", game, (correctSpot))
+
+            wrong_spot = await db.execute("""UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id AND user_id = :user_id""", game)
+
+
+        except sqlite3.IntegrityError as e:
+            abort(409, e)
 # #
 # #         # (May not be needed)
 # #         game["correct_spot"] = correct_spot
@@ -229,8 +247,9 @@ async def play_game(data):
 #             id = game["game_id"]
 #             return game, 200, {"Location": f"/games/play/{id}"}
 # #
-#     else:
-#         abort(404)
+    else:
+        print("Guess was not in possible_answers")
+        abort(404)
 
     # else:
     #     abort(404)
@@ -240,9 +259,8 @@ async def play_game(data):
 @validate_request(newGame)
 async def create_game(data):
     db = await _get_db()
-    game = dataclasses.asdict(data)
+    newgame = dataclasses.asdict(data)
     print("game: ", game)
-    #Fix
     try:
         id = await db.execute(
             """
@@ -255,7 +273,7 @@ async def create_game(data):
     except sqlite3.IntegrityError as e:
         abort(409, e)
 
-    game["game_id"] = id
+    newgame["game_id"] = id
     return game, 201, {"Location": f"/game/{id}"}
 
 
