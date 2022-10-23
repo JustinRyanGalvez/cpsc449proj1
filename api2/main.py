@@ -54,14 +54,21 @@ def index():
     <p>A prototype API for user information of Worldle players</p>\n
     """)
 
-# Apeksha portion, include authentication with password
+# Register user
 @app.route("/register", methods=["POST"])
 @validate_request(User)
 async def register(data):
     db = await _get_db()
+
+    # Use user class as staple for sql commands
     user = dataclass.asdict(data)
+
+    # Insert user info in user table
     try:
-        id = await db.execute("INSERT INTO user(username, password) VALUES (:username, :password)", user)
+        id = await db.execute(
+            "INSERT INTO user(username, password) VALUES (:username, :password)",
+            user
+        )
     except sqlite3.IntegrityError as e:
         abort(409, e)
 
@@ -69,15 +76,20 @@ async def register(data):
     return user, 201, {"Location": f"/users/{id}"}
 
 @app.route("/login/<string:username>/<string:password>", methods=["GET"])
-# @validate_request(User)
 async def authenticate(username, password):
     db = await _get_db()
-    # user = dataclasses.asdict(data)
-    print("Helloas")
-    userid = await db.fetch_one("SELECT * FROM user WHERE username = :username AND password = :password", values={"username" : username, "password" : password})
-    print("hi")
-    print(userid)
-    #values={"username":username, "password": password}
+
+    # Grab username and password from db
+    userid = await db.fetch_one(
+        """
+        SELECT *
+        FROM user
+        WHERE username = :username
+        AND password = :password
+        """,
+        values={"username" : username, "password" : password}
+    )
+
     if userid:
         return { "authenticated": True },200
     else:
@@ -87,18 +99,33 @@ async def authenticate(username, password):
 @app.route("/games/<int:user_id>", methods=["GET"])
 async def grab_games(user_id):
     db = await _get_db()
-    game = await db.fetch_one("SELECT * FROM game WHERE user_id = :user_id",
-    values={"user_id": user_id})
+
+    # Grab all games from game table
+    game = await db.fetch_one(
+        "SELECT * FROM game WHERE user_id = :user_id",
+        values={"user_id": user_id}
+    )
     if game:
         return dict(game)
     else:
         abort(404)
 
 # Grab game state
-@app.route("/games/<int:game_id>", methods=["GET"])
+@app.route("/games/<int:game_id>/<int:user_id>", methods=["GET"])
 async def grab_game_state(game_id):
     db = await _get_db()
-    game_state = await db.fetch_one("SELECT * FROM game_state WHERE game_id = :game_id", values={"game_id" : game_id})
+
+    # Grab game_state from game_state table and return as dictionary to user
+    game_state = await db.fetch_one(
+        """
+        SELECT *
+        FROM game_state
+        WHERE game_id = :game_id
+        AND user_id = :user_id
+        """,
+        values={"game_id" : game_id, "user_id" : user_id}
+    )
+
     if game_state:
         return dict(game_state)
     else:
@@ -254,8 +281,11 @@ async def play_game(data):
 @validate_request(newGame)
 async def create_game(data):
     db = await _get_db()
+
+    # Initialize class newGame as dictionary using data in POST command
     newgame = dataclasses.asdict(data)
-    print("game: ", newgame)
+
+    # Create new game in game table
     try:
         id = await db.execute(
             """
