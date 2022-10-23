@@ -75,8 +75,8 @@ async def register(data):
     user["id"] = id
     return user, 201, {"Location": f"/users/{id}"}
 
-@app.route("/login/<string:username>/<string:password>", methods=["GET"])
-async def authenticate(username, password):
+@app.route("/basic-auth/<string:user>/<string:passwd>", methods=["GET"])
+async def authenticate(user, passwd):
     db = await _get_db()
 
     # Grab username and password from db
@@ -84,52 +84,42 @@ async def authenticate(username, password):
         """
         SELECT *
         FROM user
-        WHERE username = :username
-        AND password = :password
+        WHERE username = :user
+        AND password = :passwd
         """,
-        values={"username" : username, "password" : password}
+        values={"user" : user, "passwd" : passwd}
     )
 
     if userid:
-        return { "authenticated": True },200
+        return { "authenticated": True }, 200
     else:
         return{"error":"could not verify user"}, 401, {'WWW-Authenticate': 'Basic realm="User Visible Realm"'}
 
-# Grab games of user
-@app.route("/games/<int:user_id>", methods=["GET"])
-async def grab_games(user_id):
+# Create new game
+@app.route("/games/new/", methods=["POST"])
+@validate_request(newGame)
+async def create_game(data):
+
     db = await _get_db()
 
-    # Grab all games from game table
-    game = await db.fetch_one(
-        "SELECT * FROM game WHERE user_id = :user_id",
-        values={"user_id": user_id}
-    )
-    if game:
-        return dict(game)
-    else:
-        abort(404)
+    # Initialize class newGame as dictionary using data in POST command
+    newgame = dataclasses.asdict(data)
 
-# Grab game state
-@app.route("/games/<int:game_id>/<int:user_id>", methods=["GET"])
-async def grab_game_state(game_id):
-    db = await _get_db()
+    # Create new game in game table
+    try:
+        id = await db.execute(
+            """
+            INSERT INTO game(user_id, word_id)
+            VALUES ((SELECT user_id FROM user WHERE user_id = :user_id), (SELECT word_id FROM correct_answers ORDER BY RANDOM() LIMIT 1))
+            """,
+            newgame,
+        )
 
-    # Grab game_state from game_state table and return as dictionary to user
-    game_state = await db.fetch_one(
-        """
-        SELECT *
-        FROM game_state
-        WHERE game_id = :game_id
-        AND user_id = :user_id
-        """,
-        values={"game_id" : game_id, "user_id" : user_id}
-    )
+    except sqlite3.IntegrityError as e:
+        abort(409, e)
 
-    if game_state:
-        return dict(game_state)
-    else:
-        abort(404)
+    newgame["game_id"] = id
+    return newgame, 201, {"Location": f"/game/{id}"}
 
 # Play game
 @app.route("/play", methods=["PATCH"])
@@ -169,8 +159,33 @@ async def play_game(data):
         values={"game_id" : game_id, "user_id" : user_id},
     )
 
-    if guesses_left[0] == 0:
-        abort(404)
+    min_guess = await db.fetch_one(
+        """
+        SELECT MIN(guesses_left)
+        FROM game_states
+        WHERE game_id = :game_id
+        AND user_id = :user_id
+        """,
+        values={"game_id" : game_id, "user_id" : user_id},
+    )
+
+    print(min_guess[0])
+    min_guess = min_guess[0]
+
+    condition = await db.fetch_one(
+        """
+        SELECT condition
+        FROM game_states
+        WHERE game_id = :game_id
+        AND user_id = :user_id
+        AND guesses_left = :min_guess
+        """,
+        values={"game_id" : game_id, "user_id" : user_id, "min_guess" : min_guess},
+    )
+
+
+    if guesses_left[0] == 0 or condition[0] == 'W':
+        return {"error: game has terminated"}, 404
 
     # Grabs secret word for comparing later
     secret_word = await db.fetch_one(
@@ -182,26 +197,50 @@ async def play_game(data):
         values={"game_id": game_id},
     )
 
+    print("secret_word: ", secret_word[0])
     # Grab all possible answers from db
+    correct_answers = await db.fetch_all("SELECT answers FROM correct_answers")
     possible_answers = await db.fetch_all("SELECT answers FROM possible_answers")
     counter = 0
+
+    for i in range(len(correct_answers)):
+        if guess == correct_answers[i][0]:
+            counter = 1
+            guess_valid = 'True'
 
     # Check if guess is valid by comparing it to every possible answer
     for i in range(len(possible_answers)):
         if guess == possible_answers[i][0]:
             counter = 1
             guess_valid = 'True'
-            print("guess valid: ", guess_valid)
 
     if counter == 1:
 
         # If winning condition, update condition
         if guess == secret_word[0]:
             # update condition
-            id = await db.execute("UPDATE game SET condition = 'W', correct_spots = :guess WHERE game_id = :game_id AND user_id = :user_id", game)
-            game["correct_spot"] = correctSpot
-            game["wrong_spot"] = wrongSpot
-            return game, 201, {"Location": f"/games/{id}"}
+            id = await db.execute(
+                "UPDATE game SET condition = 'W' WHERE game_id = :game_id AND user_id = :user_id",
+                values={"game_id" : game_id, "user_id" : user_id}
+            )
+            condition = 'W'
+            correctSpot = guess
+            wrongSpot = ''
+            guesses_left = guesses_left[0]
+            guesses_left -= 1
+            game["guess_valid"] = guess_valid
+            game["guesses_left"] = guesses_left
+            game["correct_spot"] = guess
+            game["wrong_spot"] = ''
+            game["condition"] = 'W'
+            id = await db.execute(
+                """
+                INSERT INTO game_states(game_id, user_id, word_id, guess, guess_valid, guesses_left, correct_spot, wrong_spot, condition)
+                VALUES(:game_id, :user_id, (SELECT word_id FROM game WHERE user_id = :user_id), :guess, :guess_valid, :guesses_left, :correct_spot, :wrong_spot, :condition)
+                """,
+                values={"game_id" : game_id, "user_id" : user_id, "guess" : guess, "guess_valid" : guess_valid, "guesses_left" : guesses_left, "correct_spot" : correctSpot, "wrong_spot" : wrongSpot, "condition" : condition},
+            )
+            return game, 200, {"Location": f"/games/{id}"}
 
         # Place guess letters in list for easier manipulation
         correctSpotList = []
@@ -272,34 +311,44 @@ async def play_game(data):
         return game, 200, {"Location": f"/games/{id}"}
 
     else:
-        print("Guess was not in possible_answers")
-        abort(404)
+        return {"error": "Guess was not a possible answer"}, 404
 
-
-# Create new game
-@app.route("/games/new/", methods=["POST"])
-@validate_request(newGame)
-async def create_game(data):
+# Grab games of user
+@app.route("/games/<int:user_id>", methods=["GET"])
+async def grab_games(user_id):
     db = await _get_db()
 
-    # Initialize class newGame as dictionary using data in POST command
-    newgame = dataclasses.asdict(data)
+    # Grab all games from game table
+    game = await db.fetch_one(
+        "SELECT * FROM game WHERE user_id = :user_id",
+        values={"user_id": user_id}
+    )
+    if game:
+        return dict(game)
+    else:
+        return {"error": "Games were not found"}, 404
 
-    # Create new game in game table
-    try:
-        id = await db.execute(
-            """
-            INSERT INTO game(user_id, word_id)
-            VALUES (:user_id, (SELECT word_id FROM correct_answers ORDER BY RANDOM() LIMIT 1))
-            """,
-            newgame,
-        )
+# Grab game state
+@app.route("/games/<int:game_id>/<int:user_id>", methods=["GET"])
+async def grab_game_state(game_id):
+    db = await _get_db()
 
-    except sqlite3.IntegrityError as e:
-        abort(409, e)
+    # Grab game_state from game_state table and return as dictionary to user
+    game_state = await db.fetch_one(
+        """
+        SELECT *
+        FROM game_state
+        WHERE game_id = :game_id
+        AND user_id = :user_id
+        """,
+        values={"game_id" : game_id, "user_id" : user_id}
+    )
 
-    newgame["game_id"] = id
-    return newgame, 201, {"Location": f"/game/{id}"}
+    if game_state:
+        return dict(game_state)
+    else:
+        return {"error": "Game state was not found"}, 404
+        abort(404)
 
 @app.errorhandler(RequestSchemaValidationError)
 def bad_request(e):
