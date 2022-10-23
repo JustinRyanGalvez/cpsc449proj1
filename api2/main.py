@@ -7,7 +7,10 @@ import json
 import databases
 import toml
 import random
-
+@dataclasses.dataclass
+class User:
+    username: str
+    password: str
 from quart import Quart, g, request, abort
 from quart_schema import QuartSchema, RequestSchemaValidationError, validate_request
 
@@ -78,15 +81,63 @@ def index():
 
 # Apeksha portion, include authentication with password
 @app.route("/register", methods=["POST"])
-async def register():
+@validate_request(User)
+async def register(data):
     db = await _get_db()
+    user = dataclasses.asdict(data)
 
-# Grab games of user
+    #if not request.authorization:
+     #   return{"error":"could not verify user"}, 401, {'WWW-Authenticate': 'Basic realm="User Visible Realm"'}
+
+    #else:
+     #   auth = request.authorization
+    #    user = await authenticate_user(auth.username, auth.password)
+     #   if user:
+      #      return { "authenticated": true },200
+       # else:
+        #    abort(401)
+
+    #values={"username":username, "password": password}
+    try:
+        id = await db.execute("INSERT INTO user(username, password) VALUES (:username, :password)",user)
+    except:
+        abort(409, sqlite3.IntegrityError)
+    user["id"] = id
+    return user,201,{"Location": f"/users/{id}"}
+
+    #if request.authorization:
+     #   auth = request.authorization
+      #  user = await authenticate_user(auth.username, auth.password)
+       # if user:
+        #    return { "authenticated": true },200
+        #else:
+         #   abort(401)
+
+    #else:
+     #   return{"error":"could not verify user"}, 401, {'WWW-Authenticate': 'Basic realm="User Visible Realm"'}
+
+@app.route("/login/<string:username>/<string:password>", methods=["GET"])
+# @validate_request(User)
+async def authenticate(username, password):
+    db = await _get_db()
+    # user = dataclasses.asdict(data)
+    print("Helloas")
+    userid = await db.fetch_one("SELECT * FROM user WHERE username = :username AND password = :password", values={"username" : username, "password" : password})
+    print("hi")
+    print(userid)
+    #values={"username":username, "password": password}
+    if userid:
+        return { "authenticated": True },200
+    else:
+        return{"error":"could not verify user"}, 401, {'WWW-Authenticate': 'Basic realm="User Visible Realm"'}
+
+#Grab games of user
 @app.route("/games/<int:user_id>", methods=["GET"])
 async def grab_games(user_id):
     db = await _get_db()
     game = await db.fetch_one("SELECT * FROM game WHERE user_id = :user_id",
     values={"user_id": user_id})
+    print(game)
     if game:
         return dict(game)
     else:
@@ -119,7 +170,7 @@ async def play_game(data):
     guess = game["guess"]
     # Check if game exists by looking at the word_id with game_id and user_id
     # word_id = await db.fetch_one(
-    #     """
+    #   
     #     SELECT word_id
     #     FROM game
     #     WHERE :user_id
@@ -221,14 +272,16 @@ async def play_game(data):
         print("wrongSpot: ", wrongSpot)
 # #
 #         # Update correct spot and wrong spot in db
-        try:
-            correct_spot = await db.execute("""UPDATE game SET correct_spot = ? WHERE guess = :guess AND game_id = :game_id AND user_id = :user_id""", game, (correctSpot))
+        game["correct_spot"] = correctSpot
+        game["wrong_spot"] = wrongSpot
+        #try:
+         #   correct_spot = await db.execute("""UPDATE game SET correct_spot = ? WHERE guess = :guess AND game_id = :game_id AND user_id = :user_id""", (correctSpot))
 
-            wrong_spot = await db.execute("""UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id AND user_id = :user_id""", game)
+#            wrong_spot = await db.execute("""UPDATE game SET wrong_spot = :wrongSpot WHERE game_id = :game_id AND user_id = :user_id""", game)
 
 
-        except sqlite3.IntegrityError as e:
-            abort(409, e)
+       # except sqlite3.IntegrityError as e:
+         #   abort(409, e)
 # #
 # #         # (May not be needed)
 # #         game["correct_spot"] = correct_spot
