@@ -61,7 +61,7 @@ async def register(data):
     db = await _get_db()
 
     # Use user class as staple for sql commands
-    user = dataclass.asdict(data)
+    user = dataclasses.asdict(data)
 
     # Insert user info in user table
     try:
