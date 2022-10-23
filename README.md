@@ -6,7 +6,15 @@ Carter Loya
 Justin Galvez
 
 How to Start the Service:
+
 First off you need to enter the api2 folder,
 the next step which you need to take would be to
 run the ./bin/init.sh. This will initialize the database for you.
-The json files which were provided have been populated the wordle.db using the python script populate.py. Both located in the /var folder. 
+
+The json files which were provided have been populated the wordle.db using the python script populate.py. Both located in the /var folder.
+
+Next use the command foreman start to start the server.
+
+In the main.py file, you can see all the possible things you can do with our API.
+
+Hope you enjoy!
