@@ -159,33 +159,8 @@ async def play_game(data):
         values={"game_id" : game_id, "user_id" : user_id},
     )
 
-    min_guess = await db.fetch_one(
-        """
-        SELECT MIN(guesses_left)
-        FROM game_states
-        WHERE game_id = :game_id
-        AND user_id = :user_id
-        """,
-        values={"game_id" : game_id, "user_id" : user_id},
-    )
-
-    print(min_guess[0])
-    min_guess = min_guess[0]
-
-    condition = await db.fetch_one(
-        """
-        SELECT condition
-        FROM game_states
-        WHERE game_id = :game_id
-        AND user_id = :user_id
-        AND guesses_left = :min_guess
-        """,
-        values={"game_id" : game_id, "user_id" : user_id, "min_guess" : min_guess},
-    )
-
-
-    if guesses_left[0] == 0 or condition[0] == 'W':
-        return {"error: game has terminated"}, 404
+    if guesses_left[0] == 0:
+        abort(404)
 
     # Grabs secret word for comparing later
     secret_word = await db.fetch_one(
@@ -226,10 +201,8 @@ async def play_game(data):
             condition = 'W'
             correctSpot = guess
             wrongSpot = ''
-            guesses_left = guesses_left[0]
-            guesses_left -= 1
             game["guess_valid"] = guess_valid
-            game["guesses_left"] = guesses_left
+            game["guesses_left"] = guesses_left[0]
             game["correct_spot"] = guess
             game["wrong_spot"] = ''
             game["condition"] = 'W'
@@ -238,7 +211,7 @@ async def play_game(data):
                 INSERT INTO game_states(game_id, user_id, word_id, guess, guess_valid, guesses_left, correct_spot, wrong_spot, condition)
                 VALUES(:game_id, :user_id, (SELECT word_id FROM game WHERE user_id = :user_id), :guess, :guess_valid, :guesses_left, :correct_spot, :wrong_spot, :condition)
                 """,
-                values={"game_id" : game_id, "user_id" : user_id, "guess" : guess, "guess_valid" : guess_valid, "guesses_left" : guesses_left, "correct_spot" : correctSpot, "wrong_spot" : wrongSpot, "condition" : condition},
+                values={"game_id" : game_id, "user_id" : user_id, "guess" : guess, "guess_valid" : guess_valid, "guesses_left" : guesses_left[0], "correct_spot" : correctSpot, "wrong_spot" : wrongSpot, "condition" : condition},
             )
             return game, 200, {"Location": f"/games/{id}"}
 
