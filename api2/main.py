@@ -144,6 +144,31 @@ async def play_game(data):
         values={"game_id" : game_id}
     )
 
+    min_guess = await db.fetch_one(
+        """
+        SELECT MIN(guesses_left)
+        FROM game_states
+        WHERE game_id = :game_id
+        AND user_id = :user_id
+        """,
+        values={"game_id" : game_id, "user_id" : user_id},
+    )
+
+    minimum_guess = min_guess[0]
+
+    condition = await db.fetch_one(
+        """
+        SELECT condition
+        FROM game_states
+        WHERE game_id = :game_id
+        AND user_id = :user_id
+        AND guesses_left = :minimum_guess
+        """,
+        values={"game_id" : game_id, "user_id" : user_id, "minimum_guess" : minimum_guess},
+    )
+
+    current_condition = condition[0]
+
     # Initialize more variables
     word_id = word_id[0]
     guess = game["guess"]
@@ -159,8 +184,8 @@ async def play_game(data):
         values={"game_id" : game_id, "user_id" : user_id},
     )
 
-    if guesses_left[0] == 0:
-        abort(404)
+    if guesses_left[0] == 0 or current_condition == 'W':
+        return {"error" : "Game was terminated"}
 
     # Grabs secret word for comparing later
     secret_word = await db.fetch_one(
@@ -172,7 +197,6 @@ async def play_game(data):
         values={"game_id": game_id},
     )
 
-    print("secret_word: ", secret_word[0])
     # Grab all possible answers from db
     correct_answers = await db.fetch_all("SELECT answers FROM correct_answers")
     possible_answers = await db.fetch_all("SELECT answers FROM possible_answers")
